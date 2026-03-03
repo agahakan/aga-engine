@@ -1,0 +1,12 @@
+build*/
+.cache/
+.direnv/
+result
+compile_commands.json
+*.wasm
+*.data
+*.js
+*.so
+*.dylib
+*.dll
+*.exe
