@@ -1,0 +1,51 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "native-debug",
+      "displayName": "native debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "AGA_BUILD_DEMO": "ON"
+      }
+    },
+    {
+      "name": "native-release",
+      "displayName": "native release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "AGA_BUILD_DEMO": "ON"
+      }
+    },
+    {
+      "name": "wasm-debug",
+      "displayName": "wasm debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/wasm-debug",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "AGA_BUILD_DEMO": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug"
+    },
+    {
+      "name": "native-release",
+      "configurePreset": "native-release"
+    },
+    {
+      "name": "wasm-debug",
+      "configurePreset": "wasm-debug"
+    }
+  ]
+}
+
