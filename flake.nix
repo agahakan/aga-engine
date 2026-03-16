@@ -35,14 +35,5 @@
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeLibs;
         };
-
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = "aga-engine";
-          version = "0.1.0";
-          src = self;
-          nativeBuildInputs = with pkgs; [ cmake ninja pkg-config unzip ];
-          buildInputs = nativeLibs;
-          cmakeFlags = [ "-DAGA_BUILD_DEMO=ON" ];
-        };
       });
 }
