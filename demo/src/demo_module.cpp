@@ -49,6 +49,7 @@ DemoModule::DemoModule(flecs::world& ecs) {
         }
 
         const auto& keys = input->keyboard;
+        const auto& mouse = input->mouse;
         glm::vec3 movement{0.0F};
         if (keys.down(input::Key::w)) {
           movement += transform.forward();
@@ -59,13 +60,13 @@ DemoModule::DemoModule(flecs::world& ecs) {
         if (keys.down(input::Key::d)) {
           movement += transform.right();
         }
-        if (keys.down(input::Key::a)) {
+        if (keys.down(input::Key::q)) {
           movement -= transform.right();
         }
-        if (keys.down(input::Key::space)) {
+        if (keys.down(input::Key::space) || keys.down(input::Key::e)) {
           movement += glm::vec3{0.0F, 1.0F, 0.0F};
         }
-        if (keys.down(input::Key::left_shift)) {
+        if (keys.down(input::Key::left_shift) || keys.down(input::Key::a)) {
           movement -= glm::vec3{0.0F, 1.0F, 0.0F};
         }
 
@@ -75,27 +76,30 @@ DemoModule::DemoModule(flecs::world& ecs) {
         float yaw = 0.0F;
         float pitch = 0.0F;
         if (keys.down(input::Key::left)) {
-          yaw += 1.0F;
+          yaw += controller.look_speed * delta;
         }
         if (keys.down(input::Key::right)) {
-          yaw -= 1.0F;
+          yaw -= controller.look_speed * delta;
         }
         if (keys.down(input::Key::up)) {
-          pitch += 1.0F;
+          pitch += controller.look_speed * delta;
         }
         if (keys.down(input::Key::down)) {
-          pitch -= 1.0F;
+          pitch -= controller.look_speed * delta;
+        }
+
+        if (mouse.down(input::MouseButton::right) && !mouse.pressed(input::MouseButton::right)) {
+          yaw -= static_cast<float>(mouse.delta_x()) * controller.mouse_look_sensitivity;
+          pitch -= static_cast<float>(mouse.delta_y()) * controller.mouse_look_sensitivity;
         }
 
         if (yaw != 0.0F) {
-          transform.rotation = glm::normalize(
-              glm::angleAxis(yaw * controller.look_speed * delta, glm::vec3{0.0F, 1.0F, 0.0F}) *
-              transform.rotation);
+          transform.rotation =
+              glm::normalize(glm::angleAxis(yaw, glm::vec3{0.0F, 1.0F, 0.0F}) * transform.rotation);
         }
         if (pitch != 0.0F) {
-          transform.rotation = glm::normalize(
-              transform.rotation *
-              glm::angleAxis(pitch * controller.look_speed * delta, glm::vec3{1.0F, 0.0F, 0.0F}));
+          transform.rotation = glm::normalize(transform.rotation *
+                                              glm::angleAxis(pitch, glm::vec3{1.0F, 0.0F, 0.0F}));
         }
       });
 }

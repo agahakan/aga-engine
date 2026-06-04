@@ -16,6 +16,7 @@ struct ActiveCamera {};
 struct FlyCameraController {
   float move_speed = 5.0F;
   float look_speed = 1.6F;
+  float mouse_look_sensitivity = 0.0025F;
 };
 
 glm::mat4 projection_matrix(const Camera& camera, float aspect_ratio);
