@@ -318,24 +318,11 @@ public:
   void resize(std::uint32_t width, std::uint32_t height) {
     width = std::max(width, 1U);
     height = std::max(height, 1U);
-    if (width == width_ && height == height_) {
+    if (surface_configured_ && width == width_ && height == height_) {
       return;
     }
 
-    width_ = width;
-    height_ = height;
-
-    auto config = WGPU_SURFACE_CONFIGURATION_INIT;
-    config.device = device_;
-    config.format = surface_format_;
-    config.usage = WGPUTextureUsage_RenderAttachment;
-    config.width = width_;
-    config.height = height_;
-    config.presentMode = config_.vsync ? WGPUPresentMode_Fifo : WGPUPresentMode_Immediate;
-    config.alphaMode = WGPUCompositeAlphaMode_Auto;
-    wgpuSurfaceConfigure(surface_, &config);
-
-    create_depth_resources();
+    configure_surface(width, height);
   }
 
   void render(const RenderScene& scene) {
@@ -349,7 +336,7 @@ public:
     wgpuSurfaceGetCurrentTexture(surface_, &surface_texture);
     if (surface_texture.status == WGPUSurfaceGetCurrentTextureStatus_Outdated ||
         surface_texture.status == WGPUSurfaceGetCurrentTextureStatus_Lost) {
-      resize(width_, height_);
+      configure_surface(width_, height_);
       release_prepared_draws();
       return;
     }
@@ -440,6 +427,24 @@ private:
     bind_desc.entryCount = 1;
     bind_desc.entries = &bind_entry;
     return wgpuDeviceCreateBindGroup(device_, &bind_desc);
+  }
+
+  void configure_surface(std::uint32_t width, std::uint32_t height) {
+    width_ = std::max(width, 1U);
+    height_ = std::max(height, 1U);
+
+    auto config = WGPU_SURFACE_CONFIGURATION_INIT;
+    config.device = device_;
+    config.format = surface_format_;
+    config.usage = WGPUTextureUsage_RenderAttachment;
+    config.width = width_;
+    config.height = height_;
+    config.presentMode = config_.vsync ? WGPUPresentMode_Fifo : WGPUPresentMode_Immediate;
+    config.alphaMode = WGPUCompositeAlphaMode_Auto;
+    wgpuSurfaceConfigure(surface_, &config);
+    surface_configured_ = true;
+
+    create_depth_resources();
   }
 
   void prepare_draws(const RenderScene& scene) {
@@ -599,6 +604,7 @@ private:
   WGPUTextureView depth_view_ = nullptr;
   std::uint32_t width_ = 0;
   std::uint32_t height_ = 0;
+  bool surface_configured_ = false;
   std::vector<GpuMesh> meshes_;
   std::vector<PreparedDraw> prepared_draws_;
 };
