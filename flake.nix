@@ -11,14 +11,12 @@
       let
         pkgs = import nixpkgs { inherit system; };
         nativeLibs = with pkgs; [
+          libffi
           libxkbcommon
           vulkan-loader
           vulkan-headers
-          libx11
-          libxcursor
-          libxi
-          libxinerama
-          libxrandr
+          wayland
+          wayland-protocols
         ];
       in {
         devShells.default = pkgs.mkShell {
@@ -31,6 +29,7 @@
             ninja
             pkg-config
             unzip
+            wayland-scanner
           ] ++ nativeLibs;
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeLibs;

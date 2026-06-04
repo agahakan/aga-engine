@@ -46,7 +46,7 @@ void Renderer::render(const RenderScene& scene) { impl_->render(scene); }
 
 #include <webgpu/webgpu.h>
 
-#if defined(GLFW_EXPOSE_NATIVE_X11)
+#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
 #include <GLFW/glfw3native.h>
 #endif
 
@@ -199,15 +199,14 @@ WGPUDevice request_device(WGPUInstance instance, WGPUAdapter adapter) {
 }
 
 WGPUSurface create_surface(WGPUInstance instance, window::Window& window) {
-#if defined(GLFW_EXPOSE_NATIVE_X11)
-  auto xlib_source = WGPU_SURFACE_SOURCE_XLIB_WINDOW_INIT;
-  xlib_source.display = glfwGetX11Display();
-  xlib_source.window =
-      static_cast<std::uint64_t>(glfwGetX11Window(window::detail::glfw_handle(window)));
+#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
+  auto wayland_source = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
+  wayland_source.display = glfwGetWaylandDisplay();
+  wayland_source.surface = glfwGetWaylandWindow(window::detail::glfw_handle(window));
 
   auto descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
   descriptor.label = wgpu_string("aga surface");
-  descriptor.nextInChain = &xlib_source.chain;
+  descriptor.nextInChain = &wayland_source.chain;
   return wgpuInstanceCreateSurface(instance, &descriptor);
 #else
   (void)instance;

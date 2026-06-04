@@ -13,7 +13,7 @@ target_link_libraries(
 
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   find_package(Vulkan REQUIRED)
-  target_compile_definitions(aga_render PRIVATE GLFW_EXPOSE_NATIVE_X11)
+  target_compile_definitions(aga_render PRIVATE GLFW_EXPOSE_NATIVE_WAYLAND)
   target_link_libraries(aga_render PUBLIC Vulkan::Vulkan)
 endif()
 
