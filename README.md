@@ -28,9 +28,10 @@ For wasm:
 nix develop
 cmake --preset wasm-debug
 cmake --build --preset wasm-debug
+cd build/wasm-debug/demo
+python3 -m http.server 8080
 ```
 
+Open `http://127.0.0.1:8080/aga_demo.html` in a browser with WebGPU enabled.
 The wasm preset uses Emscripten, GLFW's browser port, and the `emdawnwebgpu`
 port. Native builds download the pinned wgpu-native release at configure time.
-The implemented renderer backend is native WebGPU; the wasm build keeps the
-same engine API ready for a browser surface backend.

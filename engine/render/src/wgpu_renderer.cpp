@@ -1,50 +1,14 @@
 #include <aga/render/renderer.hpp>
 
-#if defined(AGA_BROWSER_WEBGPU)
-
-#include <memory>
-#include <utility>
-#include <vector>
-
-namespace aga::render {
-class Renderer::Impl {
-public:
-  void initialize(window::Window&, const RendererConfig&) {}
-
-  MeshId create_mesh(const MeshData& mesh) {
-    meshes_.push_back(mesh);
-    return MeshId{static_cast<std::uint32_t>(meshes_.size())};
-  }
-
-  void resize(std::uint32_t, std::uint32_t) {}
-  void render(const RenderScene&) {}
-
-private:
-  std::vector<MeshData> meshes_;
-};
-
-Renderer::Renderer() : impl_(std::make_unique<Impl>()) {}
-Renderer::~Renderer() = default;
-Renderer::Renderer(Renderer&&) noexcept = default;
-Renderer& Renderer::operator=(Renderer&&) noexcept = default;
-
-void Renderer::initialize(window::Window& window, const RendererConfig& config) {
-  impl_->initialize(window, config);
-}
-
-MeshId Renderer::create_mesh(const MeshData& mesh) { return impl_->create_mesh(mesh); }
-
-void Renderer::resize(std::uint32_t width, std::uint32_t height) { impl_->resize(width, height); }
-
-void Renderer::render(const RenderScene& scene) { impl_->render(scene); }
-} // namespace aga::render
-
-#else
-
-#include <aga/window/native_window.hpp>
 #include <aga/window/window.hpp>
 
 #include <webgpu/webgpu.h>
+
+#if defined(AGA_BROWSER_WEBGPU)
+#include <emscripten.h>
+#else
+#include <aga/window/native_window.hpp>
+#endif
 
 #if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
 #include <GLFW/glfw3native.h>
@@ -59,7 +23,9 @@ void Renderer::render(const RenderScene& scene) { impl_->render(scene); }
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#if !defined(AGA_BROWSER_WEBGPU)
 #include <thread>
+#endif
 #include <utility>
 
 namespace aga::render {
@@ -147,7 +113,11 @@ struct alignas(16) DrawUniforms {
 template <typename TRequest> void wait_for(WGPUInstance instance, TRequest& request) {
   while (!request.done.load(std::memory_order_acquire)) {
     wgpuInstanceProcessEvents(instance);
+#if defined(AGA_BROWSER_WEBGPU)
+    emscripten_sleep(1);
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds{1});
+#endif
   }
 }
 
@@ -199,7 +169,16 @@ WGPUDevice request_device(WGPUInstance instance, WGPUAdapter adapter) {
 }
 
 WGPUSurface create_surface(WGPUInstance instance, window::Window& window) {
-#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
+#if defined(AGA_BROWSER_WEBGPU)
+  (void)window;
+  auto canvas_source = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
+  canvas_source.selector = wgpu_string("#canvas");
+
+  auto descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
+  descriptor.label = wgpu_string("aga canvas surface");
+  descriptor.nextInChain = &canvas_source.chain;
+  return wgpuInstanceCreateSurface(instance, &descriptor);
+#elif defined(GLFW_EXPOSE_NATIVE_WAYLAND)
   auto wayland_source = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
   wayland_source.display = glfwGetWaylandDisplay();
   wayland_source.surface = glfwGetWaylandWindow(window::detail::glfw_handle(window));
@@ -215,11 +194,7 @@ WGPUSurface create_surface(WGPUInstance instance, window::Window& window) {
 #endif
 }
 
-WGPUTextureFormat choose_surface_format(WGPUSurface surface, WGPUAdapter adapter) {
-  auto capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
-  check(wgpuSurfaceGetCapabilities(surface, adapter, &capabilities) == WGPUStatus_Success,
-        "failed to read surface capabilities");
-
+WGPUTextureFormat choose_surface_format(const WGPUSurfaceCapabilities& capabilities) {
   WGPUTextureFormat selected =
       capabilities.formatCount > 0 ? capabilities.formats[0] : WGPUTextureFormat_BGRA8Unorm;
   for (std::size_t i = 0; i < capabilities.formatCount; ++i) {
@@ -230,8 +205,65 @@ WGPUTextureFormat choose_surface_format(WGPUSurface surface, WGPUAdapter adapter
     }
   }
 
-  wgpuSurfaceCapabilitiesFreeMembers(capabilities);
   return selected;
+}
+
+WGPUPresentMode choose_present_mode(const WGPUSurfaceCapabilities& capabilities, bool vsync) {
+#if defined(AGA_BROWSER_WEBGPU)
+  (void)vsync;
+#else
+  if (!vsync) {
+    for (std::size_t i = 0; i < capabilities.presentModeCount; ++i) {
+      if (capabilities.presentModes[i] == WGPUPresentMode_Immediate) {
+        return WGPUPresentMode_Immediate;
+      }
+    }
+  }
+#endif
+
+  for (std::size_t i = 0; i < capabilities.presentModeCount; ++i) {
+    if (capabilities.presentModes[i] == WGPUPresentMode_Fifo) {
+      return WGPUPresentMode_Fifo;
+    }
+  }
+
+  return capabilities.presentModeCount > 0 ? capabilities.presentModes[0] : WGPUPresentMode_Fifo;
+}
+
+WGPUCompositeAlphaMode choose_alpha_mode(const WGPUSurfaceCapabilities& capabilities) {
+  for (std::size_t i = 0; i < capabilities.alphaModeCount; ++i) {
+    if (capabilities.alphaModes[i] == WGPUCompositeAlphaMode_Auto) {
+      return WGPUCompositeAlphaMode_Auto;
+    }
+  }
+
+  for (std::size_t i = 0; i < capabilities.alphaModeCount; ++i) {
+    if (capabilities.alphaModes[i] == WGPUCompositeAlphaMode_Opaque) {
+      return WGPUCompositeAlphaMode_Opaque;
+    }
+  }
+
+  return capabilities.alphaModeCount > 0 ? capabilities.alphaModes[0] : WGPUCompositeAlphaMode_Auto;
+}
+
+struct SurfaceSettings {
+  WGPUTextureFormat format = WGPUTextureFormat_BGRA8Unorm;
+  WGPUPresentMode present_mode = WGPUPresentMode_Fifo;
+  WGPUCompositeAlphaMode alpha_mode = WGPUCompositeAlphaMode_Auto;
+};
+
+SurfaceSettings choose_surface_settings(WGPUSurface surface, WGPUAdapter adapter, bool vsync) {
+  auto capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
+  check(wgpuSurfaceGetCapabilities(surface, adapter, &capabilities) == WGPUStatus_Success,
+        "failed to read surface capabilities");
+
+  SurfaceSettings settings;
+  settings.format = choose_surface_format(capabilities);
+  settings.present_mode = choose_present_mode(capabilities, vsync);
+  settings.alpha_mode = choose_alpha_mode(capabilities);
+
+  wgpuSurfaceCapabilitiesFreeMembers(capabilities);
+  return settings;
 }
 } // namespace
 
@@ -289,7 +321,10 @@ public:
     adapter_ = request_adapter(instance_, surface_);
     device_ = request_device(instance_, adapter_);
     queue_ = wgpuDeviceGetQueue(device_);
-    surface_format_ = choose_surface_format(surface_, adapter_);
+    const auto surface_settings = choose_surface_settings(surface_, adapter_, config_.vsync);
+    surface_format_ = surface_settings.format;
+    present_mode_ = surface_settings.present_mode;
+    alpha_mode_ = surface_settings.alpha_mode;
 
     create_pipeline();
 
@@ -389,7 +424,9 @@ public:
     command_desc.label = wgpu_string("aga frame commands");
     WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, &command_desc);
     wgpuQueueSubmit(queue_, 1, &commands);
+#if !defined(AGA_BROWSER_WEBGPU)
     wgpuSurfacePresent(surface_);
+#endif
 
     wgpuCommandBufferRelease(commands);
     wgpuCommandEncoderRelease(encoder);
@@ -439,8 +476,8 @@ private:
     config.usage = WGPUTextureUsage_RenderAttachment;
     config.width = width_;
     config.height = height_;
-    config.presentMode = config_.vsync ? WGPUPresentMode_Fifo : WGPUPresentMode_Immediate;
-    config.alphaMode = WGPUCompositeAlphaMode_Auto;
+    config.presentMode = present_mode_;
+    config.alphaMode = alpha_mode_;
     wgpuSurfaceConfigure(surface_, &config);
     surface_configured_ = true;
 
@@ -597,6 +634,8 @@ private:
   WGPUDevice device_ = nullptr;
   WGPUQueue queue_ = nullptr;
   WGPUTextureFormat surface_format_ = WGPUTextureFormat_BGRA8Unorm;
+  WGPUPresentMode present_mode_ = WGPUPresentMode_Fifo;
+  WGPUCompositeAlphaMode alpha_mode_ = WGPUCompositeAlphaMode_Auto;
   WGPUBindGroupLayout draw_bind_group_layout_ = nullptr;
   WGPUPipelineLayout pipeline_layout_ = nullptr;
   WGPURenderPipeline pipeline_ = nullptr;
@@ -624,5 +663,3 @@ void Renderer::resize(std::uint32_t width, std::uint32_t height) { impl_->resize
 
 void Renderer::render(const RenderScene& scene) { impl_->render(scene); }
 } // namespace aga::render
-
-#endif

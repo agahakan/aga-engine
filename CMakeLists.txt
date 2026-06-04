@@ -24,6 +24,9 @@ target_compile_features(aga_options INTERFACE cxx_std_23)
 target_compile_definitions(aga_options INTERFACE GLM_FORCE_RADIANS
                                                  GLM_FORCE_DEPTH_ZERO_TO_ONE
                                                  GLM_ENABLE_EXPERIMENTAL)
+if(EMSCRIPTEN)
+  target_link_options(aga_options INTERFACE "SHELL:-sSTACK_SIZE=2097152")
+endif()
 
 add_subdirectory(engine/core)
 add_subdirectory(engine/window)
@@ -36,4 +39,3 @@ add_subdirectory(engine/aga)
 if(AGA_BUILD_DEMO)
   add_subdirectory(demo)
 endif()
-
