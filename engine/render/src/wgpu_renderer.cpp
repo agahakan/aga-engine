@@ -51,13 +51,15 @@ void Renderer::render(const RenderScene& scene) { impl_->render(scene); }
 #endif
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 
 namespace aga::render {
@@ -113,11 +115,13 @@ void check(bool condition, std::string_view message) {
 }
 
 struct AdapterRequest {
+  std::atomic_bool done = false;
   WGPUAdapter adapter = nullptr;
   WGPURequestAdapterStatus status = WGPURequestAdapterStatus_Error;
 };
 
 struct DeviceRequest {
+  std::atomic_bool done = false;
   WGPUDevice device = nullptr;
   WGPURequestDeviceStatus status = WGPURequestDeviceStatus_Error;
 };
@@ -140,10 +144,11 @@ struct alignas(16) DrawUniforms {
   glm::vec4 color{1.0F};
 };
 
-void wait_for(WGPUInstance instance, WGPUFuture future) {
-  auto wait_info = WGPU_FUTURE_WAIT_INFO_INIT;
-  wait_info.future = future;
-  wgpuInstanceWaitAny(instance, 1, &wait_info, std::numeric_limits<std::uint64_t>::max());
+template <typename TRequest> void wait_for(WGPUInstance instance, TRequest& request) {
+  while (!request.done.load(std::memory_order_acquire)) {
+    wgpuInstanceProcessEvents(instance);
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
 }
 
 WGPUAdapter request_adapter(WGPUInstance instance, WGPUSurface surface) {
@@ -153,16 +158,18 @@ WGPUAdapter request_adapter(WGPUInstance instance, WGPUSurface surface) {
   options.powerPreference = WGPUPowerPreference_HighPerformance;
 
   auto callback = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
-  callback.mode = WGPUCallbackMode_WaitAnyOnly;
+  callback.mode = WGPUCallbackMode_AllowSpontaneous;
   callback.userdata1 = &request;
   callback.callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView,
                          void* userdata1, void*) {
     auto* result = static_cast<AdapterRequest*>(userdata1);
     result->status = status;
     result->adapter = adapter;
+    result->done.store(true, std::memory_order_release);
   };
 
-  wait_for(instance, wgpuInstanceRequestAdapter(instance, &options, callback));
+  (void)wgpuInstanceRequestAdapter(instance, &options, callback);
+  wait_for(instance, request);
   check(request.status == WGPURequestAdapterStatus_Success && request.adapter != nullptr,
         "failed to request webgpu adapter");
   return request.adapter;
@@ -174,16 +181,18 @@ WGPUDevice request_device(WGPUInstance instance, WGPUAdapter adapter) {
   descriptor.label = wgpu_string("aga device");
 
   auto callback = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
-  callback.mode = WGPUCallbackMode_WaitAnyOnly;
+  callback.mode = WGPUCallbackMode_AllowSpontaneous;
   callback.userdata1 = &request;
   callback.callback = [](WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView,
                          void* userdata1, void*) {
     auto* result = static_cast<DeviceRequest*>(userdata1);
     result->status = status;
     result->device = device;
+    result->done.store(true, std::memory_order_release);
   };
 
-  wait_for(instance, wgpuAdapterRequestDevice(adapter, &descriptor, callback));
+  (void)wgpuAdapterRequestDevice(adapter, &descriptor, callback);
+  wait_for(instance, request);
   check(request.status == WGPURequestDeviceStatus_Success && request.device != nullptr,
         "failed to request webgpu device");
   return request.device;

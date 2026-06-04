@@ -62,6 +62,7 @@ function(aga_fetch_wgpu_native)
   set_target_properties(
     aga_wgpu
     PROPERTIES IMPORTED_LOCATION "${wgpu_native_SOURCE_DIR}/${AGA_WGPU_LIBRARY}"
+               IMPORTED_NO_SONAME TRUE
                INTERFACE_INCLUDE_DIRECTORIES "${wgpu_native_SOURCE_DIR}/include")
 
   target_compile_definitions(aga_wgpu INTERFACE AGA_NATIVE_WGPU=1)
@@ -78,4 +79,10 @@ function(aga_copy_wgpu_runtime target)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:aga_wgpu>
             $<TARGET_FILE_DIR:${target}>
     VERBATIM)
+
+  if(UNIX AND NOT APPLE)
+    set_property(TARGET ${target} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+  elseif(APPLE)
+    set_property(TARGET ${target} APPEND PROPERTY BUILD_RPATH "@loader_path")
+  endif()
 endfunction()
